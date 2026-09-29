@@ -1,0 +1,8 @@
+library_name: rsj
+language: rust
+spine: itertools
+existing_libraries:
+  itertools: existing_library/itertools
+problems:
+  - 01_step
+  - 02_step

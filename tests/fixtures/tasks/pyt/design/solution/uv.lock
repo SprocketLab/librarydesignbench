@@ -1,0 +1,17 @@
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "pyt"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "pyyaml" },
+]
+
+[[package]]
+name = "pyyaml"
+version = "6.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/source/P/PyYAML/pyyaml-6.0.2.tar.gz", hash = "sha256:d584d9ec91adf1c7d0d2876e7ee2875dc1dc2ce6b1932a641b0a4df1d4d11080", size = 130631 }

@@ -1,0 +1,20 @@
+target-version = "py312"
+line-length = 80
+indent-width = 4
+preview = false
+respect-gitignore = false
+force-exclude = false
+exclude = []
+src = []
+
+[lint]
+select = ["I"]
+
+[lint.isort]
+force-single-line = true
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false

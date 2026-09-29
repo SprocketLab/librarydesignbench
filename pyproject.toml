@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lib-design-bench"
+version = "0.1.0"
+description = "Benchmark how agent-authored library designs support downstream use."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "lib-design-bench maintainers" }]
+dependencies = [
+  "click>=8.1",
+  "harbor[daytona,modal]",
+  "jinja2>=3.1.6",
+  "modal>=1.5.5",
+  "pydantic>=2.11.0",
+  "PyYAML>=6.0.2",
+  "rich>=13.9.0",
+  "structlog>=24.4.0",
+  "typer>=0.15.0,<0.26",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pre-commit>=4.0.0",
+  "pytest>=8.3.0",
+  "pytest-xdist>=3.6.0",
+  "ruff==0.16.6",
+  "ty>=0.0.36",
+  "vulture>=2.14",
+]
+
+[project.scripts]
+ldb = "lib_design_bench.cli:main"
+
+[tool.uv.sources]
+harbor = { git = "https://github.com/harbor-framework/harbor.git", rev = "0348989adffbb43bf0b410fd36197333239633f1" }
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "src/lib_design_bench",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "docker: integration tests that require a Docker daemon and harbor's no-network compose profile",
+  "slow_e2e: high-cost Docker workflows; pass --run-slow-e2e to run them",
+]
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+force-exclude = true
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["B", "D102", "D103", "E", "F", "I", "RUF", "SIM", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+
+[tool.ty.src]
+exclude = ["tests/fixtures/**"]
+
+[tool.vulture]
+paths = ["src", "tests"]
+min_confidence = 100

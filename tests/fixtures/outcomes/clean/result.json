@@ -1,0 +1,37 @@
+{
+  "id": "704d34c5-5c90-508a-ad10-6736c9e131ed",
+  "task_name": "pyt__01_step",
+  "trial_name": "clean",
+  "trial_uri": "file:///runs/outcomes/clean",
+  "task_id": {
+    "path": "problems/pyt/phase_2/examples/01_step"
+  },
+  "task_checksum": "0f8a1c2b3d4e5f60718293a4b5c6d7e8",
+  "config": {
+    "task": {
+      "path": "problems/pyt/phase_2/examples/01_step",
+      "source": "pyt"
+    },
+    "trial_name": "clean",
+    "trials_dir": "/runs/outcomes",
+    "agent": {
+      "name": "mini-swe-agent",
+      "model_name": "openai/model"
+    }
+  },
+  "agent_info": {
+    "name": "mini-swe-agent",
+    "version": "2.4.4",
+    "model_info": {
+      "name": "model",
+      "provider": "openai"
+    }
+  },
+  "verifier_result": {
+    "rewards": {
+      "reward": 1.0
+    }
+  },
+  "started_at": "2026-09-01T12:30:00Z",
+  "finished_at": "2026-09-01T12:30:00Z"
+}

@@ -1,0 +1,8 @@
+source: "0.14.0"
+clone: https://github.com/rust-itertools/itertools
+ref: v0.14.0
+isolation_identifiers: [itertools]
+workspace_dependencies:
+  itertools: "0.14.0"
+dependent_libraries:
+  - itertools

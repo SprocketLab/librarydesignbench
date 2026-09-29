@@ -1,0 +1,9 @@
+source: more-itertools==10.8.0
+clone: https://github.com/more-itertools/more-itertools
+ref: v10.8.0
+isolation_identifiers: [more_itertools]
+dependent_libraries:
+  - more-itertools
+related_dependencies:
+  pytest: pytest==8.3.4
+  packaging: packaging==24.2

@@ -1,0 +1,99 @@
+# mini-swe-agent config used by every LDB Mini-SWE implementor run.
+#
+# mini-swe-agent's packaged `mini.yaml` wraps `{{task}}` in SWE-bench framing
+# ("Please solve this issue" and a reproduce-then-fix workflow). LDB tasks are
+# greenfield builds whose workflow lives in the prompt template (e.g.
+# `configs/prompts/minimal.md`), so this instance template keeps mini.yaml's
+# execution rules, example response, and command examples and drops the issue
+# framing. Everything else (system template, observation templates) stays
+# mini.yaml's own: Harbor layers this file over it as `-c mini -c <this file>`.
+#
+# Tested with mini-swe-agent 2.4.6. To replicate with Harbor's stock
+# mini-swe-agent, pass this file as its `config_file`:
+#
+#   uv run ldb eval existing-library --agent mini-swe-agent --agent-version 2.4.6 \
+#       --model anthropic/claude-sonnet-5-5 --reasoning high \
+#       --prompt configs/prompts/minimal.md \
+#       --agent-kwargs config_file=configs/mini_swe_template.yaml
+#
+# or directly: `harbor run ... --agent mini-swe-agent --ak config_file=configs/mini_swe_template.yaml`.
+agent:
+  instance_template: |
+    {{task}}
+
+    Submit your work and finish by issuing the following command: `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`.
+
+    ## Command execution rules
+
+    You are operating in an environment where
+
+    1. You issue at least one command
+    2. The system executes the command(s) in a subshell
+    3. You see the result(s)
+    4. You write your next command(s)
+
+    Each response should include:
+
+    1. **Reasoning text** where you explain your analysis and plan
+    2. At least one tool call with your command
+
+    **CRITICAL REQUIREMENTS:**
+
+    - Your response SHOULD include reasoning text explaining what you're doing
+    - Your response MUST include AT LEAST ONE bash tool call
+    - Directory or environment variable changes are not persistent. Every action is executed in a new subshell.
+    - However, you can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/working/dir && ...` or write/load environment variables from files
+    - Submit your work and finish by issuing the following command: `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`.
+      Do not combine it with any other command. <important>After this command, you cannot continue working on this task.</important>
+
+    Example of a CORRECT response:
+    <example_response>
+    I need to understand the structure of the workspace first. Let me check what files are in the current directory.
+
+    [Makes bash tool call with {"command": "ls -la"} as arguments]
+    </example_response>
+
+    <system_information>
+    {{system}} {{release}} {{version}} {{machine}}
+    </system_information>
+
+    ## Useful command examples
+
+    ### Create a new file:
+
+    ```bash
+    cat <<'EOF' > newfile.py
+    import numpy as np
+    hello = "world"
+    print(hello)
+    EOF
+    ```
+
+    ### Edit files with sed:
+
+    ```bash
+    # Replace all occurrences
+    sed -i 's/old_string/new_string/g' filename.py
+
+    # Replace only first occurrence
+    sed -i 's/old_string/new_string/' filename.py
+
+    # Replace first occurrence on line 1
+    sed -i '1s/old_string/new_string/' filename.py
+
+    # Replace all occurrences in lines 1-10
+    sed -i '1,10s/old_string/new_string/g' filename.py
+    ```
+
+    ### View file content:
+
+    ```bash
+    # View specific lines with numbers
+    nl -ba filename.py | sed -n '10,20p'
+    ```
+
+    ### Any other command you want to run
+
+    ```bash
+    anything
+    ```

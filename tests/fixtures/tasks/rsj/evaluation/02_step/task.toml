@@ -1,0 +1,36 @@
+# Test fixture only. Not actual benchmark data.
+
+schema_version = "1.2"
+
+artifacts = [{ source = "/workspace", exclude = [".venv", ".venv/**", "target", "target/**", "**/target/**", "node_modules", "node_modules/**", "**/node_modules/**", "__pycache__", "**/__pycache__", "*.pyc", ".pytest_cache", ".ruff_cache", ".mypy_cache", "dist", "build"] }]
+
+[task]
+name = "lib-design-bench/rsj-02_step"
+description = "Evaluation Phase problem 02_step for rsj."
+authors = []
+keywords = ["library-design", "evaluation", "rsj"]
+
+[metadata]
+author_name = "lib-design-bench-tests"
+author_email = "unknown"
+difficulty_explanation = "Tiny Rust cutover tasks for fixture e2e coverage."
+solution_explanation = "Each step uses rsj or a fallback based on what setup detected."
+tags = ["fixture", "rust", "evaluation", "cutover"]
+expert_time_estimate_hours = 0.1
+
+[verifier]
+timeout_sec = 60.0
+
+[agent]
+timeout_sec = 120.0
+network_mode = "allowlist"
+allowed_hosts = []
+
+[environment]
+build_timeout_sec = 120.0
+network_mode = "public"
+cpus = 1
+memory_mb = 1024
+storage_mb = 2048
+gpus = 0
+workdir = "/workspace"

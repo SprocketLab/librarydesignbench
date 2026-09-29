@@ -1,0 +1,38 @@
+{
+  "id": "89148749-403e-57a7-acf4-8b6feccda6d4",
+  "task_name": "pyt__01_step",
+  "trial_name": "provider_error",
+  "trial_uri": "file:///runs/outcomes/provider_error",
+  "task_id": {
+    "path": "problems/pyt/phase_2/examples/01_step"
+  },
+  "task_checksum": "0f8a1c2b3d4e5f60718293a4b5c6d7e8",
+  "config": {
+    "task": {
+      "path": "problems/pyt/phase_2/examples/01_step",
+      "source": "pyt"
+    },
+    "trial_name": "provider_error",
+    "trials_dir": "/runs/outcomes",
+    "agent": {
+      "name": "mini-swe-agent",
+      "model_name": "openai/model"
+    }
+  },
+  "agent_info": {
+    "name": "mini-swe-agent",
+    "version": "2.4.4",
+    "model_info": {
+      "name": "model",
+      "provider": "openai"
+    }
+  },
+  "exception_info": {
+    "exception_type": "ApiInternalServerError",
+    "exception_message": "Command failed (exit 1): mini-swe-agent\nstdout: API Error: 500 Internal server error",
+    "exception_traceback": "ApiInternalServerError: Command failed (exit 1): mini-swe-agent\nstdout: API Error: 500 Internal server error\n",
+    "occurred_at": "2026-09-01T12:30:00Z"
+  },
+  "started_at": "2026-09-01T12:30:00Z",
+  "finished_at": "2026-09-01T12:30:00Z"
+}

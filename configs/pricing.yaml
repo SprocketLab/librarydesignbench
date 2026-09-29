@@ -1,0 +1,98 @@
+# Standardized USD-per-million-token list prices, applied with
+# `ldb recalculate RUN --pricing-config configs/pricing.yaml`.
+#
+# List prices only: standardization exists to take provider discounts and
+# launch promotions out of cross-arm comparisons. `z-ai/glm-5.3-flash` is the
+# post-promotion list price, not the 50% launch rate that expired 2026-09-09.
+# `cache_input` is the cache-read rate; cache writes bill as uncached input.
+# Cache reads are usually 0.1x input, but claude-fable-5-1 is 0.025x — $0.25, not
+# $1.00 — per Anthropic's published multiplier. Do not "correct" it to the 0.1x rule.
+# The DeepSeek flash models cache at 0.02x, and `thinkingmachines/inkling` at
+# 0.17x, which are the rates their vendors publish rather than a rounding of the
+# usual rule. `thinkingmachines/inkling` has no first-party host, so its rate is
+# what every OpenRouter host charges for it.
+# A model absent here keeps whatever rates its runs already recorded.
+models:
+  "gpt-6-astra":
+    input: 10.00
+    output: 50.00
+    cache_input: 1.00
+  "gpt-6-sol":
+    input: 2.00
+    output: 10.00
+    cache_input: 0.20
+  "gpt-6-luna":
+    input: 0.10
+    output: 0.50
+    cache_input: 0.01
+  "gpt-5.6-sol":
+    input: 4.00
+    output: 20.00
+    cache_input: 0.40
+  "gpt-5.6-terra":
+    input: 2.00
+    output: 12.00
+    cache_input: 0.20
+  "gpt-5.6-luna":
+    input: 0.20
+    output: 1.20
+    cache_input: 0.02
+  "z-ai/glm-5.3":
+    input: 1.40
+    output: 4.40
+    cache_input: 0.26
+  "z-ai/glm-5.3-flash":
+    input: 0.15
+    output: 0.50
+    cache_input: 0.03
+  "deepseek/deepseek-v4-flash-0731":
+    input: 0.14
+    output: 0.28
+    cache_input: 0.0028
+  "deepseek/deepseek-v4.1-flash":
+    input: 0.15
+    output: 0.60
+    cache_input: 0.003
+  # DeepSeek's base (off-peak) rate, as for the flash models; peak hours bill double.
+  "deepseek/deepseek-v4-pro":
+    input: 0.66
+    output: 1.98
+    cache_input: 0.022
+  "moonshotai/kimi-k3":
+    input: 3.00
+    output: 15.00
+    cache_input: 0.30
+  "thinkingmachines/inkling":
+    input: 1.00
+    output: 4.05
+    cache_input: 0.17
+  # xAI's below-200K-prompt tier (docs.x.ai/developers/pricing); a request at or
+  # above 200K prompt tokens bills at double, which the benchmark's steps stay under.
+  "grok-4.6":
+    input: 2.00
+    output: 6.00
+    cache_input: 0.50
+  "meta/muse-spark-1.3":
+    input: 1.25
+    output: 4.25
+    cache_input: 0.15
+  "claude-fable-5-1":
+    input: 10.00
+    output: 50.00
+    cache_input: 0.25
+  "claude-opus-5":
+    input: 5.00
+    output: 25.00
+    cache_input: 0.50
+  "claude-opus-5-5":
+    input: 4.00
+    output: 20.00
+    cache_input: 0.20
+  "claude-sonnet-5":
+    input: 2.00
+    output: 10.00
+    cache_input: 0.20
+  "claude-sonnet-5-5":
+    input: 2.00
+    output: 10.00
+    cache_input: 0.20

@@ -1,0 +1,21 @@
+version: "1.0.0"
+design:
+  attempts: 3
+  sandbox: {cpus: 4, memory_mb: 8192, storage_mb: 10240}
+evaluation:
+  agents:
+    luna:
+      name: codex
+      model_name: gpt-5.6-luna
+      kwargs: {reasoning_effort: high, version: "0.153.4"}
+    ds41flash:
+      name: mini-swe-agent
+      model_name: openrouter/deepseek/deepseek-v4.1-flash
+      kwargs: {reasoning_effort: high}
+    glm53flash:
+      name: mini-swe-agent
+      model_name: openrouter/z-ai/glm-5.3-flash
+      kwargs: {reasoning_effort: high}
+  attempts: 1
+  prompt: ../prompts/library_use_inst.md
+  sandbox: {cpus: 2, memory_mb: 4096, storage_mb: 10240}

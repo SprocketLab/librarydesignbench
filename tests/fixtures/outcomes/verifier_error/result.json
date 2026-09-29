@@ -1,0 +1,38 @@
+{
+  "id": "e352d972-f1ff-5da7-95e8-e1cfd4cb1f96",
+  "task_name": "pyt__01_step",
+  "trial_name": "verifier_error",
+  "trial_uri": "file:///runs/outcomes/verifier_error",
+  "task_id": {
+    "path": "problems/pyt/phase_2/examples/01_step"
+  },
+  "task_checksum": "0f8a1c2b3d4e5f60718293a4b5c6d7e8",
+  "config": {
+    "task": {
+      "path": "problems/pyt/phase_2/examples/01_step",
+      "source": "pyt"
+    },
+    "trial_name": "verifier_error",
+    "trials_dir": "/runs/outcomes",
+    "agent": {
+      "name": "mini-swe-agent",
+      "model_name": "openai/model"
+    }
+  },
+  "agent_info": {
+    "name": "mini-swe-agent",
+    "version": "2.4.4",
+    "model_info": {
+      "name": "model",
+      "provider": "openai"
+    }
+  },
+  "exception_info": {
+    "exception_type": "RewardFileNotFoundError",
+    "exception_message": "Reward file not found at /logs/verifier/reward.txt",
+    "exception_traceback": "RewardFileNotFoundError: Reward file not found at /logs/verifier/reward.txt\n",
+    "occurred_at": "2026-09-01T12:30:00Z"
+  },
+  "started_at": "2026-09-01T12:30:00Z",
+  "finished_at": "2026-09-01T12:30:00Z"
+}

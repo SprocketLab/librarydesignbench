@@ -1,0 +1,11 @@
+{
+  "library": "itertools",
+  "metrics": {
+    "stmts": 5,
+    "sloc": 12,
+    "cog_complex": 0,
+    "cyc_complex": 1,
+    "halstead_volume": 31.7,
+    "parse_tokens": 51
+  }
+}

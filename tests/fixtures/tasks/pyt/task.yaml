@@ -1,0 +1,14 @@
+library_name: pyt
+language: python
+spine: more-itertools
+replay_install_cmd: test -d /library
+existing_libraries:
+  more-itertools: existing_library/more-itertools
+  pytest: existing_library/pytest
+existing_library_problems:
+  more-itertools:
+    - 01_step
+    - 02_step
+problems:
+  - 01_step
+  - 02_step

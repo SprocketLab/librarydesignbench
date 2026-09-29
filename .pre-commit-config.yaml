@@ -1,0 +1,28 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --check .
+        language: system
+        pass_filenames: false
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check .
+        language: system
+        pass_filenames: false
+      - id: ty-check
+        name: ty check
+        entry: uv run ty check --force-exclude .
+        language: system
+        pass_filenames: false
+      - id: vulture
+        name: vulture
+        entry: uv run vulture --config pyproject.toml
+        language: system
+        pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -n 4 --ignore=tests/e2e
+        language: system
+        pass_filenames: false

@@ -1,0 +1,14 @@
+version: "1.0.0"
+tasks: [pyt, rsj]
+design:
+  attempts: 1
+  prompt: design.md
+  sandbox: {cpus: 2, memory_mb: 4096, storage_mb: 10240}
+evaluation:
+  agents:
+    impl:
+      name: oracle
+      model_name: dummy
+  attempts: 1
+  prompt: implement.md
+  sandbox: {cpus: 2, memory_mb: 4096, storage_mb: 10240}

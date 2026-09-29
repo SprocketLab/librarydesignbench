@@ -1,0 +1,6 @@
+source: pytest>=8
+clone: https://github.com/pytest-dev/pytest
+ref: '8.3.4'
+isolation_identifiers: [pytest]
+dependent_libraries:
+  - pytest

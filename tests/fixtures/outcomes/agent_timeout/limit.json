@@ -1,0 +1,4 @@
+{
+  "kind": "timeout",
+  "detail": "Agent execution timed out after 3600.0 seconds"
+}
