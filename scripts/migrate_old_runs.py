@@ -61,8 +61,8 @@ OLD_RESULTS = frozenset({"ldb-result.json", "experiment-result.json"})
 CLASSIFY = """
 import json, sys
 from pathlib import Path
-from lib_design_bench.runs.outcomes import classify_run
-from lib_design_bench.runs.store import Run
+from lib_design_bench.evaluation.outcomes import classify_run
+from lib_design_bench.evaluation.run_dir import Run
 outcomes = {d: classify_run(Run.open(Path(d))) for d in sys.argv[2:]}
 Path(sys.argv[1]).write_text(json.dumps(outcomes), encoding="utf-8")
 """
@@ -220,7 +220,7 @@ def migrate(root: Path, outcomes: dict[Path, dict[str, OutcomeClass]]) -> LdbRes
             author=author,
             score=attempt["score"] if attempt["incomplete_reason"] is None else None,
             incomplete_reason=attempt["incomplete_reason"],
-            **usage(attempt["usage"]),
+            **author_usage(slot, attempt["usage"]),
         )
 
     implementors: dict[str, AgentDetails] = {}
@@ -262,7 +262,7 @@ def migrate(root: Path, outcomes: dict[Path, dict[str, OutcomeClass]]) -> LdbRes
                     outcome=outcome,
                     simplicity=attempt["compaction"],
                     pass_rate=attempt["pass_rate"],
-                    score=attempt["score"] if outcome == "finished" else None,
+                    score=attempt["score"],
                     sandbox_cost=attempt["sandbox_usage"]["cost_usd"],
                     incomplete_reason=attempt["incomplete_reason"],
                     **usage(attempt["usage"]),
@@ -332,6 +332,47 @@ def usage(document: dict[str, Any]) -> dict[str, Any]:
         "elapsed": document.get("time_spent"),
         "steps": document.get("agent_steps"),
         "cost": document.get("cost_usd"),
+    }
+
+
+def author_usage(slot: Path, document: dict[str, Any]) -> dict[str, Any]:
+    """Project one author's usage with every Codex session it ran.
+
+    A Codex trial report records only the last session it saw, which is a
+    subagent's whenever the author spawned any. When the slot kept its session
+    rollouts, each session's final token totals are summed and priced at the
+    report's rates; a slot without rollouts ran one session, which its report
+    already covers.
+    """
+    finals = [
+        totals[-1]
+        for rollout in sorted((slot / "agent" / "sessions").rglob("rollout-*.jsonl"))
+        if (
+            totals := [
+                event["payload"]["info"]["total_token_usage"]
+                for event in map(json.loads, rollout.read_text().splitlines())
+                if event["type"] == "event_msg"
+                and event["payload"]["type"] == "token_count"
+                and event["payload"].get("info")
+            ]
+        )
+    ]
+    if not finals:
+        return usage(document)
+    input_tokens = sum(final["input_tokens"] for final in finals)
+    cached = sum(final["cached_input_tokens"] for final in finals)
+    output_tokens = sum(final["output_tokens"] for final in finals)
+    cost = (
+        (input_tokens - cached) * document["input_cost_per_million"]
+        + cached * document["cache_input_cost_per_million"]
+        + output_tokens * document["output_cost_per_million"]
+    ) / 1e6
+    return {
+        **usage(document),
+        "input_tokens": float(input_tokens),
+        "output_tokens": float(output_tokens),
+        "input_cache_tokens": float(cached),
+        "cost": cost,
     }
 
 

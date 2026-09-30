@@ -20,6 +20,7 @@ from lib_design_bench.cli import app
 from lib_design_bench.common import TIMESTAMP_FORMAT
 from lib_design_bench.models.reports import LdbResult
 from lib_design_bench.reports.rebuild import persisted_report
+from lib_design_bench.runs.plan import UNSETTLED_DESIGN_REASON
 from lib_design_bench.runs.store import Run
 from lib_design_bench.runs.store import Slot
 from tests.lib_design_bench.conftest import MINIMAL_CONFIG
@@ -386,7 +387,22 @@ def test_run_dir_reruns_failed_author_trials_and_then_plans_their_cells(
 
     assert failed.exit_code == 1
     experiment = experiment_dir(tmp_path / "runs")
-    assert {cell.task.name for cell in evaluation_cells(experiment)} == {"rsj"}
+    launched = {config.trial_name for config in recording_queue.batches[-1]}
+    assert {
+        cell.task.name
+        for cell in evaluation_cells(experiment)
+        if cell.trial_name in launched
+    } == {"rsj"}
+    held = {
+        trial.name: trial
+        for trial in LdbResult.load(experiment / "ldb-result.json").trials
+        if trial.task == "pyt"
+    }
+    assert len(held) == 2
+    assert {trial.outcome for trial in held.values()} == {"rerun"}
+    assert {trial.incomplete_reason for trial in held.values()} == {
+        UNSETTLED_DESIGN_REASON
+    }
 
     recording_queue.outcomes = {}
     recording_queue.batches.clear()
@@ -432,8 +448,14 @@ def test_run_dir_can_hold_back_failed_author_trials_instead_of_rerunning(
         config.trial_name for batch in recording_queue.batches for config in batch
     }
     assert "pyt__phase-1__author__a1" not in launched
-    assert {cell.task.name for cell in evaluation_cells(experiment)} == {"rsj"}
-    assert LdbResult.load(experiment / "ldb-result.json").meta.complete is False
+    assert not any(
+        cell.trial_name in launched
+        for cell in evaluation_cells(experiment)
+        if cell.task.name == "pyt"
+    )
+    document = LdbResult.load(experiment / "ldb-result.json")
+    assert len(document.trials) == len(evaluation_cells(experiment)) == 4
+    assert document.meta.complete is False
 
 
 def test_new_experiment_rejects_hold_design_reruns(
@@ -693,7 +715,7 @@ def test_design_only_stops_after_design_run_with_partial_result(
     recording_queue: RecordingQueue,
     continued: bool,
 ) -> None:
-    """Both forms author libraries, plan no cells, and report the partial work."""
+    """Both forms author libraries, plan but run no cell, and report every cell."""
     result = invoke_experiment(
         MINIMAL_CONFIG,
         tasks_root,
@@ -708,11 +730,14 @@ def test_design_only_stops_after_design_run_with_partial_result(
         assert result.exit_code == 0, result.output
         assert recording_queue.batches == []
 
-    assert not (experiment / "evaluation_results").exists()
     document = LdbResult.load(experiment / "ldb-result.json")
     assert document.meta.type == "experiment"
     assert document.meta.complete is False
-    assert document.trials == ()
+    assert {trial.name for trial in document.trials} == {
+        cell.trial_name for cell in evaluation_cells(experiment)
+    }
+    assert len(document.trials) == 4
+    assert {trial.outcome for trial in document.trials} == {"rerun"}
     assert {library.task for library in document.libraries.values()} == {"pyt", "rsj"}
     assert "Design run" in result.output
 
@@ -747,8 +772,11 @@ def test_continued_design_only_applies_provider_override_to_design_reruns(
     (config,) = recording_queue.configs
     assert config.environment.type == "docker"
     assert config.environment.kwargs["custom_flag"] is True
-    assert not (experiment / "evaluation_results").exists()
-    assert LdbResult.load(experiment / "ldb-result.json").trials == ()
+    evaluation = Run.open(experiment / "evaluation_results").request()
+    assert evaluation.environment.type == EnvironmentType.MODAL
+    assert {
+        trial.outcome for trial in LdbResult.load(experiment / "ldb-result.json").trials
+    } == {"rerun"}
 
 
 def test_continued_design_reports_result_environment_without_relabeling_retained_attempt(
@@ -800,7 +828,6 @@ def test_continued_design_reports_result_environment_without_relabeling_retained
     report = persisted_report(persisted)
     assert rerun_trial is not None
     assert retained_trial is not None
-    assert report is not None
     assert rerun_trial.environment_type == "docker"
     assert retained_trial.environment_type == "modal"
     by_name = {attempt.trial_name: attempt for attempt in report.attempts}

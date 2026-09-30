@@ -45,6 +45,7 @@ from lib_design_bench.cli.common import select_task_problem_pairs_from_tasks
 from lib_design_bench.common import ReasoningLevel
 from lib_design_bench.common import get_repo_root
 from lib_design_bench.logging import route_console_to_stderr
+from lib_design_bench.models.conditions import AuthoredArtifact
 from lib_design_bench.models.conditions import ExistingLibrary
 from lib_design_bench.models.conditions import LibraryCondition
 from lib_design_bench.models.conditions import NoLibrary
@@ -59,6 +60,7 @@ from lib_design_bench.models.task import ExistingLibraryEntry
 from lib_design_bench.models.task import Problem
 from lib_design_bench.models.task import Task
 from lib_design_bench.pipeline.run import execute
+from lib_design_bench.runs.plan import UNSETTLED_DESIGN_REASON
 from lib_design_bench.runs.plan import evaluation_job
 from lib_design_bench.runs.store import Run
 
@@ -219,7 +221,11 @@ def eval_design(
         n_concurrent=n_concurrent,
         environment=setup.environment,
     )
-    if request is None:
+    if all(
+        isinstance(arm.condition, AuthoredArtifact)
+        and arm.condition.incomplete_reason == UNSETTLED_DESIGN_REASON
+        for arm in request.arms
+    ):
         raise typer.BadParameter(
             "DESIGN_DIR has no selected task whose author attempts all settled."
         )

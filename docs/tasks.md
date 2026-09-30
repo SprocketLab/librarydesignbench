@@ -6,7 +6,13 @@ A task is a directory containing `task.yaml`. Tasks are not in this repo:
 - Use another checkout with the `tasks_root=PATH` override or the `tasks_root` config key.
 - In-repo fakes for tests: `tests/fixtures/tasks/{pyt,rsj}` (Python, Rust). Same layout as real tasks.
 
-Authoring rules (verifier sync, environment pinning, canary lines) are in `README.md` in the `ldb-tasks` repo. Not repeated here.
+To add or change a problem, follow [Contributing problems](contributing-problems.md)
+and open the PR in `ldb-tasks`. This repo contains the instructions; the task
+checkout contains the task files.
+
+<p align="center">
+  <img src="../assets/ldb-task-format.svg" alt="The clirs task: design/instruction.md and existing_library/clap/ each fill /library, which every one of the 13 evaluation problems imports. Each problem holds instruction.md, tests/ and solution/ with clap and no-library reference solutions. environment/ is one image under all of it, with no package registries." width="800">
+</p>
 
 ## Layout
 
@@ -76,7 +82,7 @@ Environment variables read by the verifier and solutions:
 
 - `LDB_SKIP_TESTS=1`: measure only. `test.sh` skips `behavior.sh` and writes `behavior.json` from `LDB_PASSED` and `LDB_TOTAL`. LDB sets these for `ldb static` and for remeasure replays.
 - `LDB_SOLUTION`: which `solution/<condition>/` the per-problem `solution/solve.sh` (real tasks) runs, default the spine. LDB does not set it. See materialization below.
-- `LDB_WORKSPACE`, `LDB_VERIFIER_LOG_DIR`, `LDB_TESTS_DIR`: path overrides, listed in the ldb-tasks README.
+- `LDB_WORKSPACE`, `LDB_VERIFIER_LOG_DIR`, `LDB_TESTS_DIR`: override the default verifier paths `/workspace`, `/logs/verifier`, and `/tests` respectively (see the generated `test.sh` and `static_measure.py` in `ldb-tasks/_verifier`).
 
 ## How LDB materializes a task
 

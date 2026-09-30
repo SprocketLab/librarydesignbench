@@ -553,20 +553,7 @@ def _continue_experiment(
         raise typer.BadParameter(
             f"Run directory is not an experiment: {run_dir}", param_hint="EXPERIMENT"
         )
-    evaluation_dir = run_dir / EVALUATION_RESULTS_DIR_NAME
-    execution_environment = (
-        # Author artifacts may need recreating before the full evaluation
-        # request can be loaded; resolve only its execution settings here.
-        EnvironmentConfig.model_validate(
-            json.loads((evaluation_dir / MANIFEST_FILE_NAME).read_text())["request"][
-                "environment"
-            ]
-        )
-        if Run.exists(evaluation_dir)
-        else sandbox_environment(
-            record.config.environment, record.config.evaluation.sandbox
-        )
-    )
+    execution_environment = persisted_evaluation_environment(run_dir, record)
     design_request = request
     if environment is not None:
         execution_environment = sandbox_environment(
@@ -602,6 +589,54 @@ def _continue_experiment(
     )
 
 
+def persisted_evaluation_environment(
+    run_dir: Path, record: ExperimentRecord
+) -> EnvironmentConfig:
+    """Return the environment an experiment's evaluation run was planned with.
+
+    An experiment without one yet takes its config's evaluation sandbox.
+    """
+    evaluation_dir = run_dir / EVALUATION_RESULTS_DIR_NAME
+    if not Run.exists(evaluation_dir):
+        return sandbox_environment(
+            record.config.environment, record.config.evaluation.sandbox
+        )
+    # Author artifacts may need recreating before the full evaluation request
+    # can be loaded; read only its execution settings here.
+    return EnvironmentConfig.model_validate(
+        json.loads((evaluation_dir / MANIFEST_FILE_NAME).read_text())["request"][
+            "environment"
+        ]
+    )
+
+
+def plan_evaluation_cells(
+    design_run: Run, *, n_concurrent: int, environment: EnvironmentConfig
+) -> tuple[TrialLaunch, ...]:
+    """Grow an experiment's evaluation run to every cell; return the unfinished.
+
+    Nothing launches here, so a cell whose library is not available yet is
+    still planned and reported.
+    """
+    record = design_run.manifest.experiment
+    request = design_run.request()
+    if record is None or not isinstance(request, AuthorJob):
+        raise ValueError(f"Not an experiment: {design_run.dir}")
+    evaluation_dir = design_run.dir / EVALUATION_RESULTS_DIR_NAME
+    return _planned(
+        grow_evaluation_run(
+            design_run=design_run,
+            evaluation_dir=evaluation_dir,
+            config=record.config,
+            problems=select_problems(request.tasks, ()),
+            n_concurrent=n_concurrent,
+            environment=environment,
+        ),
+        evaluation_dir,
+        record=None,
+    )
+
+
 def _execute(
     experiment: _Experiment,
     *,
@@ -612,10 +647,11 @@ def _execute(
     """Drive both phases under their leases, always writing the result document.
 
     Design work happens first because every cell mounts one of its
-    libraries. A task whose author trials all settled contributes its
-    cells to the evaluation run; one still in the rerun class holds only its
-    own cells back, so an experiment makes whatever progress its finished
-    tasks allow. A design-only invocation stops before that by request.
+    libraries. Every cell is then planned, so the result reports all of them.
+    A task whose author trials all settled runs its cells; one still in the
+    rerun class holds only its own cells back, so an experiment makes whatever
+    progress its finished tasks allow. A design-only invocation plans the
+    cells but runs none.
 
     Author trials this invocation selected and still could not settle are the
     work it was asked for and failed to do, so they are reported at ERROR and
@@ -637,16 +673,29 @@ def _execute(
                 for launch in launches_in(design_run, "rerun")
                 if experiment.selection.admits(launch)
             )
+            # A design-only invocation runs no cell, so its environment
+            # overrides leave the evaluation run's alone.
+            cells = plan_evaluation_cells(
+                design_run,
+                n_concurrent=experiment.n_concurrent,
+                environment=persisted_evaluation_environment(
+                    experiment.dir, experiment.record
+                )
+                if experiment.design_only
+                else experiment.evaluation_environment,
+            )
             if experiment.design_only:
                 logger.info(
-                    "Stopping after the design run; no cells were planned. "
-                    "Continue this directory without `--design-only` to run them.",
+                    "Stopping after the design run; its cells are planned but "
+                    "not run. Continue this directory without `--design-only` "
+                    "to run them.",
                     experiment_dir=experiment.dir.as_posix(),
                     implementors=list(experiment.record.config.evaluation.agents),
                 )
             else:
                 evaluation_report = _finish_evaluation(
                     experiment,
+                    cells,
                     force=force,
                     debug_build_contexts=debug_build_contexts,
                     runner=runner,
@@ -731,30 +780,15 @@ def _finish_design(
 
 def _finish_evaluation(
     experiment: _Experiment,
+    unfinished: tuple[TrialLaunch, ...],
     *,
     force: bool,
     debug_build_contexts: bool,
     runner: asyncio.Runner,
-) -> RunReport | None:
-    """Grow the cells, then run, regrade, and refresh the selected ones.
-
-    Returning `None` means no task has finished authoring, so the
-    experiment has no evaluation run to report yet.
-    """
+) -> RunReport:
+    """Run, regrade, and refresh the selected unfinished cells."""
     evaluation_dir = experiment.evaluation_dir
-    request = grow_evaluation_run(
-        design_run=Run.open(experiment.dir),
-        evaluation_dir=evaluation_dir,
-        config=experiment.record.config,
-        problems=select_problems(experiment.design_request.tasks, ()),
-        n_concurrent=experiment.n_concurrent,
-        environment=experiment.evaluation_environment,
-    )
-    if request is None:
-        return None
-    cells = experiment.selection.selected(
-        _planned(request, evaluation_dir, record=None), phase="evaluation"
-    )
+    cells = experiment.selection.selected(unfinished, phase="evaluation")
     logger.info(
         "Evaluating authored libraries.",
         evaluation_dir=evaluation_dir.as_posix(),

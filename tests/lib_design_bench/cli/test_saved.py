@@ -47,8 +47,12 @@ from lib_design_bench.runs.outcomes import classify
 from lib_design_bench.runs.plan import plan
 from lib_design_bench.runs.store import Run
 from lib_design_bench.runs.store import Slot
+from tests.lib_design_bench.conftest import MINIMAL_CONFIG
 from tests.lib_design_bench.conftest import Outcome
 from tests.lib_design_bench.conftest import RecordingQueue
+from tests.lib_design_bench.conftest import evaluation_cells
+from tests.lib_design_bench.conftest import experiment_dir
+from tests.lib_design_bench.conftest import invoke_experiment
 from tests.lib_design_bench.conftest import seed_slot_artifacts
 from tests.lib_design_bench.conftest import seed_slot_failure
 from tests.lib_design_bench.conftest import seed_workspace_manifest
@@ -304,7 +308,6 @@ def test_resume_recomputes_static_evidence_and_ldb_result_for_every_cell(
     assert kept.trial_report() is not None
     assert broken.trial_report() is not None
     report = persisted_report(Run.open(run_dir))
-    assert report is not None
     assert {attempt.trial_name: attempt.reward for attempt in report.attempts} == {
         broken.dir.name: 1.0,
         kept.dir.name: 1.0,
@@ -706,7 +709,6 @@ def test_recalculate_remeasures_a_typed_run_and_keeps_its_agent_evidence(
     assert replayed.verifier.env["LDB_SKIP_TESTS"] == "1"
     rewards = json.loads((trial_dir / "verifier" / "reward.json").read_text())
     run_report = persisted_report(Run.open(run_dir))
-    assert run_report is not None
     trial_report = run_report.attempts[0]
     native = TrialResult.model_validate_json((trial_dir / "result.json").read_text())
     assert native.verifier_result is not None
@@ -786,6 +788,31 @@ def test_recalculate_design_without_evaluations_is_a_no_op(
 
     assert completed.exit_code == 0, completed.output
     assert recording_queue.configs == ()
+
+
+def test_recalculate_plans_and_reports_every_cell_an_experiment_lacks(
+    tmp_path: Path, tasks_root: Path, recording_queue: RecordingQueue
+) -> None:
+    """An experiment whose cells were never planned reports each one as a rerun."""
+    created = invoke_experiment(
+        MINIMAL_CONFIG, tasks_root, tmp_path / "runs", "--design-only"
+    )
+    assert created.exit_code == 0, created.output
+    experiment = experiment_dir(tmp_path / "runs")
+    shutil.rmtree(experiment / "evaluation_results")
+    recording_queue.batches.clear()
+
+    completed = CliRunner().invoke(app, ["recalculate", experiment.as_posix()])
+
+    assert completed.exit_code == 0, completed.output
+    assert recording_queue.configs == ()
+    document = LdbResult.load(experiment / "ldb-result.json")
+    assert {trial.name for trial in document.trials} == {
+        cell.trial_name for cell in evaluation_cells(experiment)
+    }
+    assert len(document.trials) == 4
+    assert {trial.outcome for trial in document.trials} == {"rerun"}
+    assert document.meta.complete is False
 
 
 def test_recalculate_preserves_a_fractional_pass_rate(

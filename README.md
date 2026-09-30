@@ -1,126 +1,166 @@
-# Library Design Bench (LDB)
+# LibraryDesignBench (LDB)
 
-LDB measures whether a library lets fresh downstream agents do
-real application work with less implementation burden than they would carry
-without it. Each task has two phases:
+[![Paper](https://img.shields.io/badge/arXiv-2609.36730-b31b1b.svg)](https://arxiv.org/abs/2609.36730)
+[![Website](https://img.shields.io/badge/website-ldbench.com-blue.svg)](https://ldbench.com)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-1. **Design Phase**: an author agent builds a reusable library at `/workspace`
-   from `design/instruction.md`.
-2. **Evaluation Phase**: fresh implementor agents solve independent problems
-   under a library condition: an authored library (mounted read-only at
-   `/library`), no library, or a pinned existing library installed in the task
-   image.
+<p align="center">
+  <img src="assets/ldb-overview.svg" alt="LibraryDesignBench overview: an author agent designs a library, then implementor agents solve problems with it" width="900">
+</p>
 
-Verifier reward establishes behavioral validity. Checked-in static references
-quantify how much code each condition needs. No-library and existing-library
-runs give context for the authored libraries.
+---
+
+**Can agents design libraries for agents?** LibraryDesignBench (LDB) scores a
+library by how well other agents can build with it, across 242 expert-validated
+problems in 15 tasks and four languages.
+
+LDB operates in two phases:
+
+1. **Design Phase**: an author agent builds a library in `/workspace` from the
+   task's `design/instruction.md`.
+2. **Evaluation Phase**: fresh implementor agents solve the task's problems
+   under one library condition: the authored library (read-only at `/library`),
+   no library (the floor), or a pinned production library (the comparator).
+
+Each trial scores `pass_rate^2 x simplicity`, from 0 to 1. Simplicity is the mean
+ratio of a reference solution's static metrics to the implementor's, each ratio
+capped at 1.
 
 ## Setup
+
+Requires Python 3.12+, `uv`, `git`, and a running Docker daemon.
 
 ```bash
 uv sync              # add --extra dev for pytest, ruff, ty
 uv run ldb --help
-uv run pytest        # docker / slow e2e tests are skipped unless available / requested
 ```
 
-- **Tasks** live in the separate `ldb-tasks` repo. LDB clones the pinned
-  revision into `~/.cache/lib-design-bench/tasks` on first use. To use a local
-  checkout instead, set `tasks_root` in the experiment config, or pass
-  `tasks_root=../ldb-tasks` as a trailing override to `ldb eval` or `ldb verify task`.
-- **Environments** run on Harbor: `environment.type` is `docker` (default),
-  `modal`, `daytona`, or any other Harbor environment type. Docker runs need a
-  Docker daemon. Override per run with `environment.type=modal`.
-- **Credentials**: LDB stores none. Pass agent-side variables (model API keys)
-  with `--agent-env NAME=VALUE`; add network hosts with `--allow-agent-host`.
-  Remote environments use their Harbor provider's own credentials.
+- Tasks come from [`ldb-tasks`](https://github.com/gabeorlanski/ldb-tasks),
+  cloned at a pinned revision on first use.
+- Trials run on [Harbor](https://github.com/harbor-framework/harbor) with
+  Docker. Append `environment.type=modal` (or `daytona`) to run elsewhere;
+  provider credentials are separate from agent credentials.
+- Pass model API keys as `--agent-env "NAME=$NAME"` with `NAME` exported
+  **before the first run**. Harbor then saves a `${NAME}` reference instead of
+  a masked value, so keep it exported when resuming.
 
-## Running
+## Quick start
 
-### Full experiment
+Author one library for the `clirs` task and evaluate one implementor on one
+problem:
 
 ```bash
-uv run ldb run configs/experiments/official.yaml -a claude-code -m anthropic/claude-sonnet-5-5 --reasoning high
+uv run ldb run configs/experiments/official.yaml \
+  -a claude-code -m anthropic/claude-sonnet-5-5 --reasoning high \
+  --task clirs --problem maintainer-tools --eval-agent luna \
+  -n 1 design.attempts=1 evaluation.attempts=1
 ```
 
-Authors one library per task and attempt (Design Run), then evaluates every
-implementor in the config on them (Evaluation Run). The design agent comes from
-the flags, everything else from the config; override config values with
-trailing `KEY=VALUE` (for example `evaluation.attempts=2`). Useful flags:
-`--task`, `--problem`, `--eval-agent`, `--design-only`, `--name`, `-n`.
+`-a`/`-m`/`--reasoning` pick the author agent; everything else comes from the
+config, overridden by trailing `KEY=VALUE` pairs. `--task` limits which
+libraries are authored; `--problem` and `--eval-agent` limit which evaluation
+cells run. A design trial can still take hours. Results land in
+`runs/agent_attempts/<experiment>/ldb-result.json`.
 
-### Evaluate a design run's libraries
+`--task` and the overrides are saved with the experiment; `--problem` and
+`--eval-agent` apply to this invocation only, so the report stays incomplete
+until the other cells run. Repeat them when continuing:
 
 ```bash
-uv run ldb eval design runs/<design-run> -a codex -m gpt-5.6-luna --reasoning high
+uv run ldb run runs/agent_attempts/<experiment> --problem maintainer-tools --eval-agent luna
 ```
 
-Evaluates one implementor on the libraries authored by a finished Design Run.
-Produces an Evaluation Run at `runs/evaluation_<timestamp>/`.
+## Full experiment
 
-### No-library floor
+Drop the selectors to run the whole config: 15 tasks, three design attempts
+each, three implementors across 242 problems. See
+[docs/configuring-experiments.md](docs/configuring-experiments.md) to write
+your own.
 
 ```bash
-uv run ldb eval no-library -a mini-swe-agent -m openrouter/z-ai/glm-5.3-flash --task <task>
+# Design and evaluate everything; output in runs/agent_attempts/run_<timestamp>/
+uv run ldb run configs/experiments/official.yaml \
+  -a claude-code -m anthropic/claude-sonnet-5-5 --reasoning high
+
+# Stop after the Design Phase; resume later to evaluate
+uv run ldb run configs/experiments/official.yaml \
+  -a claude-code -m anthropic/claude-sonnet-5-5 --reasoning high --design-only
+
+# Resume an experiment from its saved manifest
+uv run ldb run runs/agent_attempts/<experiment>
 ```
 
-Evaluates the implementor with no library mounted.
+Resuming reruns slots that need another agent execution, regrades or
+remeasures saved ones, and evaluates newly finished libraries. A finished
+solution that fails its tests is not retried.
 
-### Existing library
+## Evaluation only
+
+`ldb eval` evaluates one implementor under one library condition and writes
+`runs/evaluation_<timestamp>/`. Options shared by all three: `--attempts`,
+`--prompt`, `--task`, `--problem` (`NAME` or `TASK/NAME`), `--name`, `-n`.
 
 ```bash
-uv run ldb eval existing-library -a mini-swe-agent -m openrouter/z-ai/glm-5.3-flash --task <task>
+# Libraries authored by a finished Design Phase
+uv run ldb eval design runs/agent_attempts/<experiment> \
+  -a codex -m gpt-5.6-luna --reasoning high
+
+# Each task's default production library (others: --existing-library NAME)
+uv run ldb eval existing-library -a codex -m gpt-5.6-luna --reasoning high
+
+# No library; the default prompt tells the agent to use one, so swap it
+uv run ldb eval no-library -a codex -m gpt-5.6-luna --reasoning high \
+  --prompt configs/prompts/no_library_inst.md
 ```
 
-Evaluates the implementor with the task's pinned existing library (its
-`spine` by default; choose others with `--existing-library NAME`).
+Resume a standalone evaluation run with `uv run ldb resume runs/<run>`.
 
-All `eval` commands share `--attempts`, `--prompt`, `--task`, `--problem`
-(`NAME` or `TASK/NAME`), `--name`, `-o`, `-n`, `--json`. Use `--help` on any
-command for the full list.
+## LibraryUseBench
 
-### Supporting commands
+LibraryUseBench measures only how well models use production libraries: the
+Evaluation Phase on existing libraries, with the same harness, prompt, and
+attempt count for every model. Swap `-m` per model:
+
+```bash
+uv run ldb eval existing-library \
+  -a mini-swe-agent --agent-version 2.4.6 -m anthropic/claude-sonnet-5-5 --reasoning high \
+  --prompt configs/prompts/minimal.md --attempts 3 \
+  --agent-kwargs config_file=configs/mini_swe_template.yaml
+```
+
+## Other commands
+
+None of these run an agent. Every command has `--help`.
 
 | Command | Purpose |
 |---|---|
-| `ldb resume RUN_DIR` | Rerun failed slots, regrade and remeasure saved ones, rebuild reports. |
-| `ldb verify task TASK -o DIR` | Verify a task's checked-in floor and ceiling reference solutions. |
-| `ldb verify run SOURCE` | Replay saved artifacts through the current verifiers. |
+| `ldb recalculate RUN --pricing-config configs/pricing.yaml` | Remeasure saved workspaces with the current verifiers, reprice cost, rewrite every report. |
+| `ldb verify run RUN --update` | Rerun the full behavioral tests on saved workspaces and write the results back. |
+| `ldb verify task TASK -o DIR` | Check a task's no-library and production-library reference solutions. |
 | `ldb static DIR` | Remeasure the static references of every task under DIR. |
-| `ldb recalculate PATH` | Remeasure saved workspaces, rewrite reports, optionally reprice cost (`--pricing-config configs/pricing.yaml`). |
 
-## Result organization
+## Documentation
 
-```
-runs/agent_attempts/run_<timestamp>/  experiment root (ldb run); also the design run
-  manifest.json  ldb-config.json  config.json  result.json  ldb-result.json  run.log
-  prompts/  sandbox-usage/
-  design_results/<trial>/           one design attempt per slot
-  evaluation_results/               nested evaluation run, same layout
-    <trial>/                        one evaluation attempt per slot
-      trial-report.json  result.json  limit.json  sandbox-usage.json  trial.log
-      agent/  verifier/  artifacts/workspace/
-runs/evaluation_<timestamp>/        standalone evaluation run (ldb eval)
-  <same root files>  <trial>/...
-```
-
-| File | Meaning |
-|---|---|
-| `ldb-result.json` | The user-facing result: run metadata, implementors, libraries, and one compact row per trial. Written at the experiment root for `ldb run`. |
-| `trial-report.json` | Per-trial evidence: reward, pass rate, simplicity, static metrics, token and sandbox cost. |
-| `manifest.json` | The run's request; what `resume` re-plans from. |
-| `verifier/reward.json` | The verifier's reward, `verifier/static_metrics.json` its static measurements. |
-| `artifacts/workspace/` | The agent's final `/workspace`; for a design trial, the authored library. |
-| `prompts/` | Rendered prompts used for each task and library condition. |
-
-Score is defined in [AGENTS.md](AGENTS.md). See
-[docs/results.md](docs/results.md) for every file, field and metric.
-
-## Key links
-
-- [configs/experiments/official.yaml](configs/experiments/official.yaml): the official experiment config
-- [configs/prompts/library_use_inst.md](configs/prompts/library_use_inst.md): the official evaluation prompt
-- [docs/results.md](docs/results.md): result layout and metrics
+- [docs/results.md](docs/results.md): reading `ldb-result.json` (one row per
+  trial), the run layout, and every metric
+- [docs/configuring-experiments.md](docs/configuring-experiments.md): experiment YAML and overrides
+- [docs/comparing-results.md](docs/comparing-results.md): compare authored, existing and no-library results
 - [docs/tasks.md](docs/tasks.md): task structure
+- [docs/contributing-problems.md](docs/contributing-problems.md): adding problems
+  (PRs go to [`ldb-tasks`](https://github.com/gabeorlanski/ldb-tasks), not here)
 - [docs/runner.md](docs/runner.md): how the runner works end to end
-- [AGENTS.md](AGENTS.md): shared terminology
-- `ldb-tasks`: the task repo (sibling checkout `../ldb-tasks`)
+- [configs/prompts/](configs/prompts/): evaluation prompts (`library_use_inst.md` is the official one)
+
+## Citation
+
+```bibtex
+@misc{orlanski2026agentsdesignlibrariesagents,
+      title={Can Agents Design Libraries for Agents?},
+      author={Gabriel Orlanski and Alex L. Zhang and Avi Trost and Vincent Sunn Chen and Frederic Sala and Aws Albarghouthi and Ludwig Schmidt},
+      year={2026},
+      eprint={2609.36730},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2609.36730},
+}
+```

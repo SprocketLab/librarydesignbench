@@ -35,6 +35,7 @@ from lib_design_bench.reports.trials import TrialPublisher
 from lib_design_bench.reports.trials import build_trial_report
 from lib_design_bench.reports.trials import recover_completed_verifier
 from lib_design_bench.runs.outcomes import classify_run
+from lib_design_bench.runs.plan import UNSETTLED_DESIGN_REASON
 from lib_design_bench.runs.plan import plan
 from lib_design_bench.runs.store import HARBOR_CONFIG_FILE_NAME
 from lib_design_bench.runs.store import TRIAL_RESULT_FILE_NAME
@@ -100,15 +101,24 @@ def run(
         for launch in launches:
             persisted.slot(launch).clear()
         runnable: list[TrialLaunch] = []
+        unsettled: set[str] = set()
         for launch in launches:
             if (
                 isinstance(launch, EvaluationLaunch)
                 and isinstance(condition := launch.arm.condition, AuthoredArtifact)
                 and condition.incomplete_reason is not None
             ):
-                _log_missing_authored_library(launch, condition)
+                if condition.incomplete_reason == UNSETTLED_DESIGN_REASON:
+                    unsettled.add(launch.task.name)
+                else:
+                    _log_missing_authored_library(launch, condition)
                 continue
             runnable.append(launch)
+        if unsettled:
+            logger.info(
+                "Skipping the cells of tasks whose Design Phase has not settled.",
+                tasks=sorted(unsettled),
+            )
         logger.info(
             "Preparing Docker images and trial build contexts.",
             run_dir=run_dir.as_posix(),

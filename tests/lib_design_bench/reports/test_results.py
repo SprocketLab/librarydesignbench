@@ -446,3 +446,39 @@ def test_trial_that_spent_its_limit_leaves_the_result_complete(
     assert trial.outcome == "finished"
     assert trial.incomplete_reason is not None
     assert result.meta.complete is True
+
+
+def test_trial_owed_more_work_keeps_its_recorded_score(
+    tmp_path: Path, tasks_root: Path, fixtures_root: Path
+) -> None:
+    """A graded slot that still owes measurement is reported with its score."""
+    task = Task.from_dir(tasks_root / "pyt")
+    run_dir = tmp_path / "evaluation"
+    (launch,) = plan(
+        Job(
+            problems=(task.problem("01_step"),),
+            arms=(
+                Arm(
+                    label="impl",
+                    condition=NoLibrary(),
+                    agent=AgentConfig(name="oracle"),
+                ),
+            ),
+            n_concurrent=1,
+        ),
+        run_dir,
+    )
+    slot = Run.open(run_dir).slot(launch)
+    seed_finished_slot(slot, fixtures_root)
+    seed_slot_artifacts(slot)
+    path = slot.dir / "result.json"
+    document = json.loads(path.read_text())
+    document["verifier_result"]["rewards"] = {"reward": 0.5, "pass_rate": 0.75}
+    path.write_text(json.dumps(document))
+
+    finalize(run_dir)
+
+    result = LdbResult.load(run_dir / "ldb-result.json")
+    (trial,) = result.trials
+    assert trial.outcome == "reanalyze"
+    assert trial.score == 0.5

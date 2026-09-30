@@ -21,6 +21,8 @@ from lib_design_bench.cli.common import override_document
 from lib_design_bench.cli.common import replacement_environment
 from lib_design_bench.cli.display import display_evaluation_scores
 from lib_design_bench.cli.display import display_experiment_result
+from lib_design_bench.cli.run import persisted_evaluation_environment
+from lib_design_bench.cli.run import plan_evaluation_cells
 from lib_design_bench.logging import route_console_to_stderr
 from lib_design_bench.metrics.costs import CostRates
 from lib_design_bench.metrics.costs import ImplementorPricing
@@ -64,7 +66,8 @@ def resume_command(
 
     Slots in the rerun class launch again; re-verify slots are regraded from
     saved artifacts; reanalyze slots refresh retained static measurements;
-    finished slots remain untouched. Finalization then rebuilds the
+    finished slots remain untouched. An experiment plans every evaluation cell
+    it lacks without running any. Finalization then rebuilds the
     reader-facing reports without extra agent work.
 
     `environment.*` overrides replace the run's persisted execution
@@ -114,6 +117,13 @@ def resume_command(
             debug_build_contexts=False,
             runner=runner,
         )
+        record = persisted.manifest.experiment
+        if record is not None:
+            plan_evaluation_cells(
+                Run.open(run_dir),
+                n_concurrent=concurrency,
+                environment=persisted_evaluation_environment(run_dir, record),
+            )
         child = Run.open(run_dir).evaluation_child()
         if child is not None:
             remeasure(
@@ -125,8 +135,6 @@ def resume_command(
             finalize(child.dir)
     persisted = Run.open(run_dir)
     report = persisted_report(persisted)
-    if report is None:
-        raise ValueError(f"resume did not produce trial reports: {run_dir}")
     if output_json:
         echo_result_json(persisted.result_owner().dir)
     elif isinstance(persisted.request(), AuthorJob):
@@ -238,14 +246,23 @@ def recalculate_command(
 ) -> None:
     """Remeasure saved workspaces in their task verifiers and rewrite every report.
 
-    Takes `environment.*` overrides for the replays that remeasure; sandbox
-    sizes are the Harbor task defaults.
+    An experiment first plans every cell its evaluation run lacks, so the
+    result lists all of them. Takes `environment.*` overrides for the replays
+    that remeasure; sandbox sizes are the Harbor task defaults.
     """
     environment = default_sandbox_environment(overrides)
     pricing = _pricing(
         input_cost, output_cost, cache_input_cost, implementor, pricing_config
     )
     try:
+        owner = Run.open(path).result_owner()
+        record = owner.manifest.experiment
+        if record is not None:
+            plan_evaluation_cells(
+                owner,
+                n_concurrent=owner.request().n_concurrent,
+                environment=persisted_evaluation_environment(owner.dir, record),
+            )
         rebuilt = recalculate(
             path, pricing, n_concurrent=n_concurrent, environment=environment
         )

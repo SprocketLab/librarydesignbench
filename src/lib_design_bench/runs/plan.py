@@ -51,6 +51,12 @@ _INSTRUCTION_PATTERN = re.compile(r"{{\s*instruction\s*}}")
 _INSTRUCTION_SENTINEL = "__LIB_DESIGN_BENCH_INSTRUCTION_PLACEHOLDER__"
 
 
+UNSETTLED_DESIGN_REASON = (
+    "Design Phase not settled: an author trial of this task owes a rerun"
+)
+"""Why a cell of a task whose Design Phase is still owed work cannot launch."""
+
+
 _ALLOWED_TEMPLATE_VARIABLES = {
     "library_name",
     "library_install",
@@ -248,11 +254,13 @@ def authored_arms(
     problems: tuple[Problem, ...],
     label: str,
     agent: AgentConfig,
+    unsettled: frozenset[str],
 ) -> tuple[Arm, ...]:
     """Create library-backed arms for every selected problem.
 
     `label` names the implementor these arms belong to, so crossing several
-    implementors over one design run keeps their cells apart.
+    implementors over one design run keeps their cells apart. The libraries of
+    an `unsettled` task are unavailable, whatever their slots hold.
     """
     selected = _selected_problems_by_task(problems)
     logger.debug(
@@ -276,6 +284,7 @@ def authored_arms(
                 problems=names,
                 label=label,
                 agent=agent,
+                settled=launch.task.name not in unsettled,
             )
         )
     return tuple(arms)
@@ -299,6 +308,7 @@ def _arm(
     problems: tuple[str, ...],
     label: str,
     agent: AgentConfig,
+    settled: bool,
 ) -> Arm:
     artifact = read_authored_artifact(source_run, launch)
     return Arm(
@@ -308,7 +318,9 @@ def _arm(
             source=artifact.workspace,
             attempt=launch.attempt,
             problems=problems,
-            incomplete_reason=artifact.incomplete_reason,
+            incomplete_reason=artifact.incomplete_reason
+            if settled
+            else UNSETTLED_DESIGN_REASON,
         ),
         agent=agent,
     )
@@ -322,21 +334,20 @@ def grow_evaluation_run(
     problems: tuple[Problem, ...],
     n_concurrent: int,
     environment: EnvironmentConfig,
-) -> Job | None:
-    """Return the evaluation request covering every task past its Design Phase.
+) -> Job:
+    """Return the evaluation request covering every cell of the experiment.
 
-    The derived request crosses every implementor the config declares with the
-    libraries of every task whose author trials have all settled,
-    over each of that task's problems and every evaluation attempt.
+    The derived request crosses every implementor the config declares with
+    every authored library, over each of its task's problems and every
+    evaluation attempt. Cells whose library is not available yet are planned
+    all the same, so every cell is reported; they launch once growing the run
+    again finds their library.
 
     An evaluation run that already exists keeps every problem and arm it
     persisted, exactly and in order; only the ones it lacks are appended, and
     execution settings follow the current invocation. Cell names carry the
     task, problem, arm label, and attempt, so a grown run leaves the names
     and slots of its earlier cells alone.
-
-    `None` means no task has finished authoring yet and there is nothing to
-    plan; a run that already exists still receives execution settings.
     """
     derived = evaluation_job(
         design_run=design_run,
@@ -351,12 +362,10 @@ def grow_evaluation_run(
     request = persisted.request()
     if not isinstance(request, Job):
         raise ValueError(f"Not an evaluation run: {evaluation_dir}")
-    grown = (request if derived is None else _union(request, derived)).model_copy(
-        update={"environment": environment}
-    )
+    grown = _union(request, derived).model_copy(update={"environment": environment})
     if grown == request:
         logger.debug(
-            "The evaluation run already holds every cell design work supports.",
+            "The evaluation run already holds every cell of the experiment.",
             evaluation_dir=evaluation_dir.as_posix(),
             arm_count=len(request.arms),
             problem_count=len(request.problems),
@@ -387,20 +396,19 @@ def evaluation_job(
     problems: tuple[Problem, ...],
     n_concurrent: int,
     environment: EnvironmentConfig,
-) -> Job | None:
-    """Cross every implementor with the libraries of every settled task.
+) -> Job:
+    """Cross every implementor with every authored library of the selected tasks.
 
-    `None` means no selected task has finished its Design Phase yet.
+    One author trial still in the rerun class makes its whole task's libraries
+    unavailable: the cells of that task mount every attempt's libraries, and a
+    rerun replaces the one it would have mounted.
     """
-    launches = _settled_author_launches(design_run)
+    launches = tuple(
+        launch for launch in design_run.launches() if isinstance(launch, DesignLaunch)
+    )
     authored = {launch.task.name for launch in launches}
     scoped = tuple(problem for problem in problems if problem.task.name in authored)
-    if not scoped:
-        logger.info(
-            "No task has finished its Design Phase, so the experiment plans no cell yet.",
-            design_run=design_run.dir.as_posix(),
-        )
-        return None
+    unsettled = _unsettled_tasks(design_run, launches)
     arms = tuple(
         arm
         for implementor, agent in settings.agents.items()
@@ -410,6 +418,7 @@ def evaluation_job(
             problems=scoped,
             label=implementor,
             agent=agent,
+            unsettled=unsettled,
         )
     )
     return Job(
@@ -422,40 +431,22 @@ def evaluation_job(
     )
 
 
-def _settled_author_launches(design_run: Run) -> tuple[DesignLaunch, ...]:
-    """Return the author launches of every task whose attempts all settled.
-
-    One attempt still in the rerun class holds its whole task back: the
-    cells of that task mount every attempt's libraries, and a rerun
-    replaces the ones it would have mounted.
-    """
-    attempts: dict[str, list[DesignLaunch]] = defaultdict(list)
-    for launch in design_run.launches():
-        if isinstance(launch, DesignLaunch):
-            attempts[launch.task.name].append(launch)
-    settled: list[DesignLaunch] = []
-    for task, launches in attempts.items():
-        outstanding = [
-            launch.trial_name
-            for launch in launches
-            if classify(design_run.slot(launch)).outcome == "rerun"
-        ]
-        if outstanding:
-            logger.info(
-                "Holding a task's cells back until its author trials finish.",
-                design_run=design_run.dir.as_posix(),
-                task=task,
-                rerun_trials=outstanding,
-            )
-            continue
-        settled.extend(launches)
-    logger.debug(
-        "Selected the author trials whose libraries cells may mount.",
-        design_run=design_run.dir.as_posix(),
-        task_count=len({launch.task.name for launch in settled}),
-        author_trial_count=len(settled),
-    )
-    return tuple(settled)
+def _unsettled_tasks(
+    design_run: Run, launches: tuple[DesignLaunch, ...]
+) -> frozenset[str]:
+    """Return the tasks with an author trial still in the rerun class."""
+    outstanding: dict[str, list[str]] = defaultdict(list)
+    for launch in launches:
+        if classify(design_run.slot(launch)).outcome == "rerun":
+            outstanding[launch.task.name].append(launch.trial_name)
+    for task, trials in outstanding.items():
+        logger.info(
+            "Holding a task's cells back until its author trials finish.",
+            design_run=design_run.dir.as_posix(),
+            task=task,
+            rerun_trials=trials,
+        )
+    return frozenset(outstanding)
 
 
 def _union(persisted: Job, derived: Job) -> Job:
@@ -465,8 +456,8 @@ def _union(persisted: Job, derived: Job) -> Job:
     condition name within a task, so an arm whose agent was hand-edited on
     disk stays as it was written rather than being planned a second time. One
     field is refreshed: an authored condition persisted while its library was
-    unavailable takes the derived condition once the library exists, so the
-    cells it holds run instead of publishing the stale incomplete reason.
+    unavailable takes the derived condition whenever that differs, so its cells
+    run once the library exists and never publish a stale incomplete reason.
     """
     known_problems = {
         (problem.task.source_dir, problem.name) for problem in persisted.problems
@@ -475,7 +466,7 @@ def _union(persisted: Job, derived: Job) -> Job:
     arms: list[Arm] = []
     for arm in persisted.arms:
         fresh = unknown_arms.pop(_arm_key(arm), None)
-        if fresh is not None and _became_available(arm.condition, fresh.condition):
+        if fresh is not None and _refreshes_unavailable(arm.condition, fresh.condition):
             arm = arm.model_copy(update={"condition": fresh.condition})
         arms.append(arm)
     return Job(
@@ -498,10 +489,12 @@ def _arm_key(arm: Arm) -> tuple[str, Path | None]:
     return arm.name(), None if task is None else task.source_dir
 
 
-def _became_available(persisted: LibraryCondition, fresh: LibraryCondition) -> bool:
+def _refreshes_unavailable(
+    persisted: LibraryCondition, fresh: LibraryCondition
+) -> bool:
     return (
         isinstance(persisted, AuthoredArtifact)
         and isinstance(fresh, AuthoredArtifact)
         and persisted.incomplete_reason is not None
-        and fresh.incomplete_reason is None
+        and fresh.incomplete_reason != persisted.incomplete_reason
     )

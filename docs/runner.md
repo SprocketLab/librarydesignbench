@@ -4,6 +4,12 @@ What happens between `ldb run` / `ldb eval ...` / `ldb resume` and a finished `l
 
 ## 1. The big picture
 
+<p align="center">
+  <img src="../assets/ldb-experiment-run.svg" alt="ldb run on clirs with configs/experiments/official.yaml: the author agent writes three crates, each passing an offline readiness check; 3 crates x 3 implementors x 13 problems fan out into 117 trials; each trial materializes the problem, builds the image, installs the library, solves, verifies and scores pass_rate^2 x simplicity." width="800">
+</p>
+
+The figure follows one experiment (`ldb run`, `configs/experiments/official.yaml`) on clirs; the rest of this page is the mechanism behind each box.
+
 ```
 config YAML + CLI flags                          cli/      parse flags, KEY=VALUE overrides, selectors
   -> ExperimentConfig (+ overrides)              models/   frozen schemas, config loading
@@ -31,16 +37,16 @@ Two rules explain most behavior:
 
 **Order of work** (`_execute` in `cli/run.py`, under the Design Run's lease):
 1. Design Run: `settle()` runs the launches, then `reverify()`, `remeasure()` and `finalize()`. It returns only when the whole design batch is done, so no evaluation trial starts before every design trial has finished.
-2. `grow_evaluation_run()` creates or widens `evaluation_results/`. Gating is per task: a task contributes cells only if none of its design attempts is in the `rerun` class. One such attempt holds back every cell of that task (its cells mount all its attempts' libraries); other tasks proceed. Cells are implementors x the settled tasks' problems x design attempts x `evaluation.attempts`. An existing Evaluation Run keeps its persisted cells and only gains new ones; the current invocation's `environment` replaces its persisted one.
+2. `grow_evaluation_run()` creates or widens `evaluation_results/` to every cell: implementors x every task's problems x design attempts x `evaluation.attempts`, so `ldb-result.json` always lists all of them. Gating is per task: if any design attempt of a task is in the `rerun` class, every cell of that task is planned with its library unavailable (its cells mount all its attempts' libraries); other tasks proceed. Growing again once the task settles makes those cells runnable. An existing Evaluation Run keeps its persisted cells and only gains new ones; the current invocation's `environment` replaces its persisted one.
 3. Evaluation Run: `settle()` again, under the Evaluation Run's own lease.
 
-A design slot that settled without a collected `/workspace` still yields cells. They are not launched (section 4), report score 0 with an `incomplete_reason` (see section 7), and stay `rerun` until the library exists.
+A cell whose library is unavailable, because its task has not settled or its design slot settled without a collected `/workspace`, is not launched (section 4). It reports score 0 with an `incomplete_reason` (see section 7) and stays `rerun` until the library exists.
 
 `finally` always publishes the experiment result from whatever exists, including after Ctrl-C (in-flight trials are discarded, so their slots stay empty and become `rerun`). If a selected design slot is still `rerun` at the end, `ldb run` exits 1.
 
-**Narrowing.** `--design-only` stops after step 1 and writes a partial result; continue the same directory without the flag. `--problem NAME` and `--eval-agent` (an `evaluation.agents` key) choose which unfinished cells this invocation runs; they do not change the persisted scope. A value that matches nothing in the experiment is rejected as a typo. `--task` narrows the persisted scope on a config and only this invocation's work on a directory.
+**Narrowing.** `--design-only` runs step 1, plans the cells of step 2 without running any, and writes a partial result listing them; continue the same directory without the flag. `--problem NAME` and `--eval-agent` (an `evaluation.agents` key) choose which unfinished Evaluation Phase cells this invocation runs; they do not reduce Design Phase authoring or change the persisted evaluation scope. Repeat them when continuing the experiment, or all remaining cells become eligible to run. A value that matches nothing in the experiment is rejected as a typo. `--task` narrows the persisted scope on a config and only this invocation's work on a directory.
 
-**Existing experiment directory.** `ldb run EXPERIMENT_DIR` continues from the manifest: it settles the Design Run, grows the Evaluation Run for newly settled tasks, then settles its cells. Flags that shape a new experiment (`--agent`, `--model`, `--reasoning`, `--agent-version`, `--agent-kwargs`, `--agent-env`, `--allow-agent-host`, `--output`, `--name`) are rejected; only `environment.*` overrides apply. `--hold-design-reruns` (directory only) does not relaunch design slots in `rerun`, so every other task proceeds; held slots still count as outstanding, so the command exits 1 after reporting them.
+**Existing experiment directory.** `ldb run EXPERIMENT_DIR` continues from the manifest: it settles the Design Run, grows the Evaluation Run so newly settled tasks' cells become runnable, then settles its cells. Flags that shape a new experiment (`--agent`, `--model`, `--reasoning`, `--agent-version`, `--agent-kwargs`, `--agent-env`, `--allow-agent-host`, `--output`, `--name`) are rejected; only `environment.*` overrides apply. `--hold-design-reruns` (directory only) does not relaunch design slots in `rerun`, so every other task proceeds; held slots still count as outstanding, so the command exits 1 after reporting them.
 
 ## 3. `ldb eval`
 
@@ -48,7 +54,7 @@ Each subcommand builds one `Job` (one implementor, label `<agent>__<model>`) and
 
 | Subcommand | Library conditions | Notes |
 |---|---|---|
-| `design DESIGN_DIR` | one authored arm per design attempt (`a<N>`) of every task whose attempts all settled | same `evaluation_job()` as `ldb run`; errors if no selected task has settled |
+| `design DESIGN_DIR` | one authored arm per design attempt (`a<N>`) of every selected task; an unsettled task's arms are planned unavailable | same `evaluation_job()` as `ldb run`; errors if no selected task has settled |
 | `no-library` | `NoLibrary` | the floor |
 | `existing-library` | each selected task's spine, or the `--existing-library` names | errors if a named library is not declared by the selected tasks |
 
@@ -107,9 +113,9 @@ Definitions are in [results.md](results.md#outcome-classes); `meta.outcome_count
 
 **Replays.** A replay is a throwaway run in a temp directory beside the source, reusing the source trial names. Its agent, `ReplayArtifactsAgent`, sets the staged starter aside, uploads the slot's `artifacts/`, restores the starter under it, and runs the task's `replay_install_cmd` (skipped for `no-library`); then the current `test.sh` grades it. `update_source` merges back only replays that produced a verifier result (for a `verify` replay, also a Harbor verification exception); others are logged and leave the source slot as it was. A `verify` merge replaces the slot's `verifier/` directory, `verifier_result` and exception, and records `manifest.verification`. A `remeasure` merge replaces only the measurement files and `verifier_result`, keeping the agent's own exception (such as its limit) and the recorded test logs. `ldb-result.json` is removed first and the manifest is written last as the completion marker; the trial report keeps the original `usage`. A replay that fails before it can grade (an `OSError` or `ValueError`) is logged, leaves every source slot untouched, and is retried by the next `ldb resume`.
 
-**Resume scope.** `ldb resume RUN_DIR` settles the directory you give it. On an experiment root that means the Design Run; the Evaluation Run is only remeasured (`reanalyze` and stale slots) and refinalized, and its `rerun` and `reverify` slots wait. To rerun evaluation cells use `ldb run EXPERIMENT_DIR` or `ldb resume EXPERIMENT_DIR/evaluation_results`. `environment.*` overrides replace the saved provider (keeping the sandbox size) in the given run's request and are persisted, so later resumes stay on it; on an experiment root the Evaluation Run's environment is not changed. Rerun and replay share one event loop; a remote environment breaks if a second loop touches its clients.
+**Resume scope.** `ldb resume RUN_DIR` settles the directory you give it. On an experiment root that means the Design Run; the Evaluation Run is grown to every cell (without launching any), remeasured (`reanalyze` and stale slots) and refinalized, and its `rerun` and `reverify` slots wait. To rerun evaluation cells use `ldb run EXPERIMENT_DIR` or `ldb resume EXPERIMENT_DIR/evaluation_results`. `environment.*` overrides replace the saved provider (keeping the sandbox size) in the given run's request and are persisted, so later resumes stay on it; on an experiment root the Evaluation Run's environment is not changed. Rerun and replay share one event loop; a remote environment breaks if a second loop touches its clients.
 
-**Report rebuild** (`reports/rebuild.py`). Every derived document comes from one path: rebuild each `trial-report.json` from the slot's `result.json` (an empty slot becomes score 0 with the cell's `incomplete_reason`, else "missing Harbor result"), delete `ldb-result.json`, rewrite the run-root `result.json`, then publish `ldb-result.json` at the result owner. Costs are re-derived at the rates each trial was last priced at unless `ldb recalculate` gives new ones. For an experiment, finalizing either run republishes the pair. `ldb recalculate PATH` is the same rebuild after remeasuring every Evaluation Phase slot that kept counts and a workspace.
+**Report rebuild** (`reports/rebuild.py`). Every derived document comes from one path: rebuild each `trial-report.json` from the slot's `result.json` (an empty slot becomes score 0 with the cell's `incomplete_reason`, else "missing Harbor result"), delete `ldb-result.json`, rewrite the run-root `result.json`, then publish `ldb-result.json` at the result owner. Costs are re-derived at the rates each trial was last priced at unless `ldb recalculate` gives new ones. For an experiment, finalizing either run republishes the pair. `ldb recalculate PATH` is the same rebuild after remeasuring every Evaluation Phase slot that kept counts and a workspace; on an experiment it first grows the Evaluation Run to every cell, so a result written before a task settled gains that task's cells.
 
 ## 6. Reference measurement
 

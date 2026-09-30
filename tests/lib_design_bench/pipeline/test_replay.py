@@ -77,7 +77,6 @@ def test_recalculate_replays_the_retained_workspace_with_its_recorded_counts(
     assert trial.incomplete_reason is None
     assert rebuilt[1].report.attempts[0].score == 1.0
     report = persisted_report(Run.open(experiment / "evaluation_results"))
-    assert report is not None
     assert report.attempts[0].score == 1.0
 
 
@@ -173,7 +172,6 @@ def test_recalculate_command_standardizes_cost_and_preserves_reported_cost(
 
     assert result.exit_code == 0, result.output
     report = persisted_report(Run.open(experiment / "evaluation_results"))
-    assert report is not None
     usage = report.attempts[0].usage
     assert report.attempts[1].score == 0.25
     assert report.attempts[1].usage.model_dump(include=set(other_costs)) == other_costs
@@ -193,7 +191,6 @@ def test_recalculate_command_standardizes_cost_and_preserves_reported_cost(
 
     assert unchanged_policy.exit_code == 0, unchanged_policy.output
     report = persisted_report(Run.open(experiment / "evaluation_results"))
-    assert report is not None
     usage = report.attempts[0].usage
     assert report.attempts[0].score == 0.25
     assert usage.reported_cost_usd == 0.75
@@ -217,7 +214,6 @@ def test_recalculate_command_standardizes_cost_and_preserves_reported_cost(
 
     assert repriced.exit_code == 0, repriced.output
     report = persisted_report(Run.open(experiment / "evaluation_results"))
-    assert report is not None
     usage = report.attempts[0].usage
     assert usage.reported_cost_usd == 0.75
     assert usage.standardized_cost_usd == usage.cost_usd == 2.25
@@ -410,7 +406,6 @@ def test_recalculate_pricing_config_reprices_every_model_it_names(
     assert result.exit_code == 0, result.output
     design = persisted_report(Run.open(experiment))
     evaluation = persisted_report(Run.open(experiment / "evaluation_results"))
-    assert design is not None and evaluation is not None
     author = _usage_by_implementor(design)["author"]
     assert author.reported_cost_usd == 0.75
     assert author.standardized_cost_usd == author.cost_usd == 5.5

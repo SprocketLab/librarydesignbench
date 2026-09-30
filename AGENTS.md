@@ -45,7 +45,7 @@ Use these words exactly; they match the code and persisted files.
 - **Spread**: `mean`, `se`, `n`, and 95% CI (`ci95_low`, `ci95_high`). Score is a stratified mean: task is a fixed stratum, one independently executed library condition is a replicate, tasks weigh equally. The CI applies to reruns of this fixed benchmark only.
 
 ## Repo map
-- `README.md`: how to run each benchmark, result layout, links.
+- `README.md`: overview, setup, how to run each benchmark, citation.
 - `docs/runner.md`: how the runner works end to end (plan, execute, resume, replay); `docs/results.md`, `docs/tasks.md`: result files and task layout.
 - `configs/`: experiment YAML, prompt templates (Jinja, must contain `{{instruction}}`), `pricing.yaml`, mini-swe-agent template.
 - `src/lib_design_bench/cli/`: the `ldb` commands, [AGENTS.md](src/lib_design_bench/cli/AGENTS.md).

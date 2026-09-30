@@ -84,7 +84,6 @@ def _only(root: Path) -> Run:
 
 def _report(run: Run) -> RunReport:
     report = persisted_report(run)
-    assert report is not None
     return report
 
 

@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: "If you use LibraryDesignBench, please cite the paper below."
+type: software
+title: "LibraryDesignBench"
+repository-code: "https://github.com/SprocketLab/librarydesignbench"
+url: "https://ldbench.com"
+license: Apache-2.0
+authors:
+  - given-names: Gabriel
+    family-names: Orlanski
+  - given-names: Alex L.
+    family-names: Zhang
+  - given-names: Avi
+    family-names: Trost
+  - given-names: Vincent Sunn
+    family-names: Chen
+  - given-names: Frederic
+    family-names: Sala
+  - given-names: Aws
+    family-names: Albarghouthi
+  - given-names: Ludwig
+    family-names: Schmidt
+preferred-citation:
+  type: article
+  title: "Can Agents Design Libraries for Agents?"
+  authors:
+    - given-names: Gabriel
+      family-names: Orlanski
+    - given-names: Alex L.
+      family-names: Zhang
+    - given-names: Avi
+      family-names: Trost
+    - given-names: Vincent Sunn
+      family-names: Chen
+    - given-names: Frederic
+      family-names: Sala
+    - given-names: Aws
+      family-names: Albarghouthi
+    - given-names: Ludwig
+      family-names: Schmidt
+  year: 2026
+  month: 9
+  journal: "arXiv preprint"
+  url: "https://arxiv.org/abs/2609.36730"
+  identifiers:
+    - type: other
+      value: "arXiv:2609.36730"
+      description: "arXiv identifier"

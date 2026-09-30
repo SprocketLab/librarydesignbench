@@ -33,7 +33,6 @@ from lib_design_bench.reports.results import run_report
 from lib_design_bench.reports.trials import build_trial_report
 from lib_design_bench.runs.outcomes import classify_run
 from lib_design_bench.runs.store import LDB_CONFIG_FILE_NAME
-from lib_design_bench.runs.store import TRIAL_REPORT_FILE_NAME
 from lib_design_bench.runs.store import OutputDocument
 from lib_design_bench.runs.store import Run
 from lib_design_bench.runs.store import RunOutputConfig
@@ -90,10 +89,9 @@ def rebuild_reports(
         )
         for launch in launches
     }
-    previous = persisted_report(run)
-    previous_trials = (
-        {} if previous is None else {t.trial_name: t for t in previous.attempts}
-    )
+    previous_trials = {
+        trial.trial_name: trial for trial in persisted_report(run).attempts
+    }
     for name, trial in trial_reports.items():
         previous_trial = previous_trials.get(name)
         prior = None if previous_trial is None else previous_trial.usage
@@ -150,18 +148,11 @@ def rebuild_reports(
     # rebuilding either one republishes the pair from both runs' evidence.
     owner = run.result_owner()
     owner_report = report if owner.dir == run.dir else persisted_report(owner)
-    if owner_report is None:
-        raise ValueError(f"Missing finalized design result: {owner.dir}")
     child = owner.evaluation_child()
-    child_report = (
+    evaluation = (
         None
         if child is None
-        else report
-        if child.dir == run.dir
-        else persisted_report(child)
-    )
-    evaluation = (
-        None if child is None or child_report is None else (child, child_report)
+        else (child, report if child.dir == run.dir else persisted_report(child))
     )
     outcomes = classify_run(owner)
     if evaluation is not None:
@@ -197,19 +188,14 @@ def rebuild_reports(
     return RebuiltReports(report=report, experiment=experiment)
 
 
-def persisted_report(run: Run) -> RunReport | None:
+def persisted_report(run: Run) -> RunReport:
     """Read a run's report back from its slots' persisted trial reports.
 
-    A slot without a trial report is projected from its Harbor result. A run
-    that has published nothing yet has no report.
+    A slot without a trial report is projected from its Harbor result, and one
+    without either is an unrun cell, so every planned trial has a row.
     """
-    launches = run.launches()
-    if not (run.dir / RESULT_FILE_NAME).is_file() and not any(
-        (run.slot(launch).dir / TRIAL_REPORT_FILE_NAME).is_file() for launch in launches
-    ):
-        return None
     reports = {}
-    for launch in launches:
+    for launch in run.launches():
         slot = run.slot(launch)
         reports[launch.trial_name] = slot.trial_report() or build_trial_report(
             launch, slot.result()

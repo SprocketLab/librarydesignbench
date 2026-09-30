@@ -471,7 +471,7 @@ def build_result(
                     outcome=outcome,
                     simplicity=trial.simplicity,
                     pass_rate=trial.pass_rate,
-                    score=trial.score if outcome == "finished" else None,
+                    score=trial.score,
                     input_tokens=trial.usage.input_tokens if not is_replay else None,
                     output_tokens=trial.usage.output_tokens if not is_replay else None,
                     input_cache_tokens=trial.usage.cache_input_tokens
