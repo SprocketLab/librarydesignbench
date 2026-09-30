@@ -16,7 +16,13 @@ checkout contains the task files.
 
 ## Layout
 
-Example: `tests/fixtures/tasks/pyt`.
+A real task, clirs, file by file:
+
+<p align="center">
+  <img src="../assets/ldb-task-tree.svg" alt="The clirs directory tree: task.yaml; design/ with instruction.md and task.toml; environment/ with Dockerfile, Cargo.toml and Cargo.lock; existing_library/ with clap and argh config.yaml; evaluation/site-builder/ with instruction.md, task.toml, workspace/, tests/ (test.sh, behavior.sh, test_solution.py, static_measure.py, static_reference.json, rustfmt.toml) and solution/ (solve.sh, clap/, no-library/); then 12 more problems." width="800">
+</p>
+
+Every field, using the fixture `tests/fixtures/tasks/pyt`:
 
 ```
 task.yaml                      library_name, language, spine, existing_libraries,
