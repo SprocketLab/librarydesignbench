@@ -19,7 +19,7 @@ _MAX_HARBOR_TRIAL_NAME_LENGTH = 58
 _MAX_EVALUATION_PROBLEM_PREFIX_LENGTH = 16
 _TRIAL_HASH_WIDTH = 8
 _TASKS_REPO_URL = "https://github.com/gabeorlanski/ldb-tasks.git"
-_TASKS_REVISION = "34414e989838ab3a0d142189db171f4ce470ce6a"
+_TASKS_REVISION = "a1f4e886063373d43e52b53b98492cf108f294e3"
 logger = structlog.get_logger(__name__)
 ReasoningLevel = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
